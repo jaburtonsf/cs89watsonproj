@@ -18,7 +18,6 @@
 
 require( 'dotenv' ).config( {silent: true} );
 
-var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
 var fs = require('fs');
 
 
@@ -33,7 +32,7 @@ var vcapServices = require( 'vcap_services' );
 var basicAuth = require( 'basic-auth-connect' );
 // var person_flag = 0;
 
-
+var ending = false;
 var total_number_injured = null;
 var current_patient = null;
 var initialized = 0;
@@ -124,48 +123,48 @@ app.post( '/api/message', function(req, res) {
  */
 function updateMessage(res, input, data) {
   
-  speech_to_text.getModels(null, function(error, models) {
-  if (error)
-    console.log('error:', error);
-  else
-    console.log(JSON.stringify(models, null, 2));
-});
+//   speech_to_text.getModels(null, function(error, models) {
+//   if (error)
+//     console.log('error:', error);
+//   else
+//     console.log(JSON.stringify(models, null, 2));
+// });
 
-  var params = {
-  model_id: 'en-US_BroadbandModel'
-};
+//   var params = {
+//   model_id: 'en-US_BroadbandModel'
+// };
 
-speech_to_text.getModel(params, function(error, model) {
-  if (error)
-    console.log('error:', error);
-  else
-    console.log(JSON.stringify(model, null, 2));
-});
+// speech_to_text.getModel(params, function(error, model) {
+//   if (error)
+//     console.log('error:', error);
+//   else
+//     console.log(JSON.stringify(model, null, 2));
+// });
 
 
-var params = {
-  content_type: 'audio/wav',
-  continuous: true,
-  interim_results: true
-};
+// var params = {
+//   content_type: 'audio/wav',
+//   continuous: true,
+//   interim_results: true
+// };
 
-// Create the stream.
-var recognizeStream = speech_to_text.createRecognizeStream(params);
+// // Create the stream.
+// var recognizeStream = speech_to_text.createRecognizeStream(params);
 
-// Pipe in the audio.
-fs.createReadStream('audio-file.wav').pipe(recognizeStream);
+// // Pipe in the audio.
+// fs.createReadStream('audio-file.wav').pipe(recognizeStream);
 
-// Pipe out the transcription to a file.
-recognizeStream.pipe(fs.createWriteStream('transcription.txt'));
+// // Pipe out the transcription to a file.
+// recognizeStream.pipe(fs.createWriteStream('transcription.txt'));
 
-// Get strings instead of buffers from 'data' events.
-recognizeStream.setEncoding('utf8');
+// // Get strings instead of buffers from 'data' events.
+// recognizeStream.setEncoding('utf8');
 
 // Listen for events.
-recognizeStream.on('data', function(event) { onEvent('Data:', event); });
-recognizeStream.on('results', function(event) { onEvent('Results:', event); });
-recognizeStream.on('error', function(event) { onEvent('Error:', event); });
-recognizeStream.on('close-connection', function(event) { onEvent('Close:', event); });
+// recognizeStream.on('data', function(event) { onEvent('Data:', event); });
+// recognizeStream.on('results', function(event) { onEvent('Results:', event); });
+// recognizeStream.on('error', function(event) { onEvent('Error:', event); });
+// recognizeStream.on('close-connection', function(event) { onEvent('Close:', event); });
 
 // Displays events on the console.
 function onEvent(name, event) {
@@ -173,15 +172,9 @@ function onEvent(name, event) {
 };
 
 
-
-
-
-
-
-
   if(checkIncident(data)){
   
-    if (data.entities[0].entity == "emergency"){
+    if (data.entities.length > 0 && data.entities[0].entity == "emergency"){
 
       emergency_type = data.entities[0].value;
       console.log(emergency_type);
@@ -193,20 +186,17 @@ function onEvent(name, event) {
     create_datastruct_if_appropriate(data);
 
 
-    if(data.context.current_patient != null){
+    if(data.context.current_patient != 0){
       
       current_patient = data.context.current_patient;
       
       //we are still collecting data on patients
       if (current_patient <= total_number_injured){
-        
-
-
 
         update_data_struct(data);
         assign_tag(data);
 
-        var user_prompt = "Ok, let's deal with patient " + current_patient.toString() + ". Please give the gender, age, and name of the patient";
+        var user_prompt = "Ok, let's deal with patient " + current_patient.toString() + ". Please give the gender, age, and name of the patient.";
         params.push(user_prompt);
 
         if (current_patient < total_number_injured && patient_data_array[current_patient-1]["patient_description"] != null){
@@ -219,15 +209,22 @@ function onEvent(name, event) {
         }
 
       }
+      else if(ending) {
 
-      //we have looped through all patients
-      else{
-        var user_prompt = "Thank you, we have received your assessment of each of the " + total_number_injured.toString() + " patients and the data has been sent to your local emergency room and inbound first responders";
+        var user_prompt = "Thank you, we have received your assessment of each of the " + total_number_injured.toString() + " patients and the data has been sent to your local emergency room and inbound first responders.";
         params.push(user_prompt);
         console.log(patient_data_array);
         var prompt_2 = "";
         params.push(prompt_2);
+        ending = false;
 
+        patient_data_array[current_patient-2]["Complaint"] = data.context.complaint;
+        if (data.context.tag != null) {
+          patient_data_array[current_patient-2]["tag"] = data.context.tag;
+        }
+        additional_information = data.context.additional;
+        console.log("AD2");
+        console.log(additional_information);
 
         var url = "http://cs.dartmouth.edu/~egreene/hospital.php?";
         var json_array = JSON.stringify(patient_data_array);
@@ -235,19 +232,19 @@ function onEvent(name, event) {
         var http_params = "emergency=" + emergency_type + "&ptArray=" + json_array + "&additional=" + additional_information;
         var combined = url + http_params;
         open(combined);
-        // console.log("HTTP PARAMS BELOW HTTP PARAMS BELOW HTTP PARAMS BELOW HTTP PARAMS BELOW")
-        // console.log(http_params);
-        // var xhr = new XMLHttpRequest();
-        // xhr.open("POST", url, true);
 
-        // //Send the proper header information along with the request
-        // xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+      }
 
-        // xhr.send(http_params);
-
-
-
-
+      //we have looped through all patients
+      else if (current_patient > total_number_injured){
+        console.log("GOT HERE");
+        var user_prompt = "Do you have any additional information to provide?"
+        ending = true;
+        //var user_prompt = "Thank you, we have received your assessment of each of the " + total_number_injured.toString() + " patients and the data has been sent to your local emergency room and inbound first responders";
+        params.push(user_prompt);
+        console.log(patient_data_array);
+        var prompt_2 = "";
+        params.push(prompt_2);
 
       }        
     }
@@ -284,23 +281,36 @@ function assign_tag(data){
   }
 }
 
+function getIndex(entity_list) {
+  // could do some error checking here.. what if data.entities.length is 0?
+  if(entity_list.length == 1) {
+    return 0;
+  }
+  else {
+    var i =0;
+    while(i< entity_list.length) {
+      if(entity_list[i].entity == 'response') {
+        return i;
+      }
+      i = i+1;
+    }
+  }
+  // none of the entities are response
+  return -1;
+}
 
 
 function update_data_struct(data){
 
-  if (data.context.current_question != null){
+  if (data.context.current_question != null && data.entities.length > 0){
 
     var index = current_patient - 1;
+    var entity_index = getIndex(data.entities);
+    console.log("INDEX OF ENTITY:")
+    console.log(entity_index);
+    console.log(data.context.current_question);
 
     switch (data.context.current_question){
-  
-
-      //NEED FUNCTION THAT LOOKS IN ENTITY LIST A RETURNS INDEX OF DESIRED ENTITY
-      //NEED FUNCTION THAT LOOKS IN ENTITY LIST A RETURNS INDEX OF DESIRED ENTITY
-      //NEED FUNCTION THAT LOOKS IN ENTITY LIST A RETURNS INDEX OF DESIRED ENTITY
-      //NEED FUNCTION THAT LOOKS IN ENTITY LIST A RETURNS INDEX OF DESIRED ENTITY
-
-      
 
       case "patient_description":
         // identify the entity of interest for this case
@@ -311,58 +321,70 @@ function update_data_struct(data){
 
 
       case "walking":
-        
-        patient_data_array[index]["Walking"] = data.entities[0].value;        
+        if (entity_index != -1) {
+          patient_data_array[index]["Walking"] = data.entities[entity_index].value;  
+        }      
         break;
 
       case "breathing":
-
-        patient_data_array[index]["Breathing"] = data.entities[0].value;
+        if (entity_index != -1) {
+          patient_data_array[index]["Breathing"] = data.entities[entity_index].value;
+        }
         break;
 
       case "breath_per_minute":
-
-        patient_data_array[index]["Breath_per_minute"] = data.entities[0].value;
+        if (entity_index != -1) {        
+          patient_data_array[index]["Breath_per_minute"] = data.entities[entity_index].value;
+        }
         break;
 
       case "pulse":
-
-        patient_data_array[index]["Pulse"] = data.entities[0].value;
+        if (entity_index != -1) {
+          patient_data_array[index]["Pulse"] = data.entities[entity_index].value;
+        }
         break;
 
       case "mental_state_1":
-
-        patient_data_array[index]["mental_state_1"] = data.entities[0].value;
+        if (entity_index != -1) {
+          patient_data_array[index]["mental_state_1"] = data.entities[entity_index].value;
+        }
         break;
 
       case "mental_state_2":
-
-        patient_data_array[index]["mental_state_2"] = data.entities[0].value;
+        if (entity_index != -1) {
+          patient_data_array[index]["mental_state_2"] = data.entities[entity_index].value;
+        }
         break;
 
       case "mental_state_3":
-
-        patient_data_array[index]["mental_state_3"] = data.entities[0].value;
+        if (entity_index != -1) {
+          patient_data_array[index]["mental_state_3"] = data.entities[entity_index].value;
+        }
         break;
 
       case "awake":
-
-        patient_data_array[index]["Awake"] = data.entities[0].value;
+        if (entity_index != -1) {
+          patient_data_array[index]["Awake"] = data.entities[entity_index].value;
+        }
         break;
 
       case "complaint":
-
-        patient_data_array[index-1]["Complaint"] = data.entities[0].value + ": " + data.context.complaint;
+        patient_data_array[index-1]["Complaint"] = data.context.complaint;
         break;
 
       case "additional":
-
+        if (data.context.tag != null) {
+          patient_data_array[index]["Tag"] = data.context.tag;
+        }
         additional_information = data.context.additional;
+        console.log("ADDITIONAL");
         console.log(additional_information);
+       // break;
         
     }
   
   }
+
 
 }
 
