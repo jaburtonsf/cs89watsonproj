@@ -33,7 +33,7 @@ var vcapServices = require( 'vcap_services' );
 var basicAuth = require( 'basic-auth-connect' );
 // var person_flag = 0;
 
-
+var voice_input_message = null;
 var total_number_injured = null;
 var current_patient = null;
 var initialized = 0;
@@ -76,6 +76,14 @@ var speech_to_text = watson.speech_to_text({
   version: 'v1'
 });
 
+var watson = require('watson-developer-cloud');
+var text_to_speech = watson.text_to_speech({
+  username: process.env.TEXT_TO_SPEECH_USERNAME || '<username>',
+  password: process.env.TEXT_TO_SPEECH_PASSWORD || '<password>',
+  version: 'v1'
+});
+
+
 // Endpoint to be call from the client side
 app.post( '/api/message', function(req, res) {
   var workspace = process.env.WORKSPACE_ID || '<workspace-id>';
@@ -98,8 +106,15 @@ app.post( '/api/message', function(req, res) {
     if ( req.body.input ) {
       // the commented out line below is where we will feed the text from the speech to text service into the conversation agent.
       // payload.input = { text : 'yes'};
-      // console.log(req.body.input);
-      payload.input = req.body.input;
+      if (voice_input_message != null){
+        payload.input = { text: voice_input_message};
+      }
+      else{
+        // console.log(req.body.input);
+        payload.input = req.body.input;
+      }
+      
+      
     }
     if ( req.body.context ) {
       // The client must maintain context/state
@@ -131,6 +146,14 @@ function updateMessage(res, input, data) {
     console.log(JSON.stringify(models, null, 2));
 });
 
+  text_to_speech.voices(null, function(error, voices) {
+  if (error)
+    console.log('error:', err);
+  else
+    console.log(JSON.stringify(voices, null, 2));
+  }
+  );
+
   var params = {
   model_id: 'en-US_BroadbandModel'
 };
@@ -146,14 +169,14 @@ speech_to_text.getModel(params, function(error, model) {
 var params = {
   content_type: 'audio/wav',
   continuous: true,
-  interim_results: true
+  interim_results: false
 };
 
 // Create the stream.
 var recognizeStream = speech_to_text.createRecognizeStream(params);
 
 // Pipe in the audio.
-fs.createReadStream('audio-file.wav').pipe(recognizeStream);
+fs.createReadStream('hello_world.wav').pipe(recognizeStream);
 
 // Pipe out the transcription to a file.
 recognizeStream.pipe(fs.createWriteStream('transcription.txt'));
@@ -162,15 +185,40 @@ recognizeStream.pipe(fs.createWriteStream('transcription.txt'));
 recognizeStream.setEncoding('utf8');
 
 // Listen for events.
-recognizeStream.on('data', function(event) { onEvent('Data:', event); });
+recognizeStream.on('data', function(event) { onEventData('Data:', event); });
 recognizeStream.on('results', function(event) { onEvent('Results:', event); });
 recognizeStream.on('error', function(event) { onEvent('Error:', event); });
 recognizeStream.on('close-connection', function(event) { onEvent('Close:', event); });
+
+
 
 // Displays events on the console.
 function onEvent(name, event) {
     console.log(name, JSON.stringify(event, null, 2));
 };
+
+
+function onEventData(name, event) {
+    console.log(name, JSON.stringify(event, null, 2));
+    voice_input_message = event;
+    console.log("INPUT MESSAGE BELOW");
+    console.log(voice_input_message);
+};
+
+
+
+var text_to_speech_params = {
+  //FOR EMILY: CHANGE THE LINE BELOW TO INSTEAD BE THE OUTPUT FROM THE JSON MESSAGE
+  //YOU WILL NEED A GLOBAL VAR THAT UPDATES EACH TIME. BEEP BEEP.
+  text: 'Hello world.',
+  voice: 'en-US_AllisonVoice',
+  accept: 'audio/wav'
+};
+
+// Pipe the synthesized text to a file.
+text_to_speech.synthesize(text_params).pipe(fs.createWriteStream('text_to_speech_output.wav'));
+
+
 
 
 
